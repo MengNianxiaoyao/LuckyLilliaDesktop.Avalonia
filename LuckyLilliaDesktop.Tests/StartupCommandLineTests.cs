@@ -1,4 +1,5 @@
 using LuckyLilliaDesktop.Utils;
+using Xunit;
 
 namespace LuckyLilliaDesktop.Tests;
 
