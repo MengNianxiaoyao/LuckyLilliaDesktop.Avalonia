@@ -23,6 +23,7 @@ public class ConfigViewModel : ViewModelBase
 
     private AppConfig _savedConfig = new();
     private bool _savedStartupEnabled;
+    private bool _isStartupConfirmDialogOpen;
     private EmailConfig _savedEmailConfig = new();
 
     private bool _hasUnsavedChanges;
@@ -169,7 +170,8 @@ public class ConfigViewModel : ViewModelBase
 
             if (value && string.IsNullOrWhiteSpace(AutoLoginQQ))
             {
-                ShowStartupConfirmDialog();
+                if (!_isStartupConfirmDialogOpen)
+                    ShowStartupConfirmDialog();
             }
             else
             {
@@ -182,6 +184,10 @@ public class ConfigViewModel : ViewModelBase
 
     private async void ShowStartupConfirmDialog()
     {
+        if (_isStartupConfirmDialogOpen)
+            return;
+
+        _isStartupConfirmDialogOpen = true;
         try
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
@@ -212,6 +218,10 @@ public class ConfigViewModel : ViewModelBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "显示开机自启确认对话框失败");
+        }
+        finally
+        {
+            _isStartupConfirmDialogOpen = false;
         }
     }
 
@@ -553,6 +563,9 @@ public class ConfigViewModel : ViewModelBase
 
     private async Task LoadConfigAsync()
     {
+        if (IsSaving)
+            return;
+
         try
         {
             var config = await _configManager.LoadConfigAsync();
@@ -647,9 +660,13 @@ public class ConfigViewModel : ViewModelBase
 
     private async Task SaveConfigAsync()
     {
+        if (IsSaving)
+            return;
+
         try
         {
             IsSaving = true;
+            var requestedStartupEnabled = StartupEnabled;
             _logger.LogInformation("开始保存配置...");
 
             // 先读现有配置再改, 只覆盖本页拥有的字段.
@@ -695,28 +712,48 @@ public class ConfigViewModel : ViewModelBase
 
             if (success && emailSuccess)
             {
-                // 保存时处理开机自启注册表
-                if (StartupEnabled != _savedStartupEnabled)
-                {
-                    bool startupResult;
-                    if (StartupEnabled)
-                        startupResult = Utils.StartupManager.EnableStartup();
-                    else
-                        startupResult = Utils.StartupManager.DisableStartup();
+                StartupOperationResult? startupOperation = null;
 
-                    if (!startupResult)
+                // 注册表读写放到后台线程，避免阻塞界面。
+                if (requestedStartupEnabled != _savedStartupEnabled)
+                {
+                    startupOperation = await Task.Run(() => requestedStartupEnabled
+                        ? StartupManager.TryEnableStartup()
+                        : StartupManager.TryDisableStartup());
+
+                    if (!startupOperation.Value.Success)
                     {
-                        _logger.LogError("设置开机自启失败，可能是路径无效或权限不足");
-                        _startupEnabled = _savedStartupEnabled;
+                        _logger.LogError("设置开机自启失败: {ErrorMessage}", startupOperation.Value.ErrorMessage);
+                        // 操作可能已经部分完成（例如注册表删除成功、旧任务删除失败），
+                        // 失败后重新读取真实状态，避免界面机械回滚到过期值。
+                        _startupEnabled = await Task.Run(() => StartupManager.IsStartupEnabled());
+                        this.RaisePropertyChanged(nameof(StartupEnabled));
+                    }
+                    else if (_startupEnabled != requestedStartupEnabled)
+                    {
+                        // 保存期间配置区会被禁用；这里仍以实际执行的请求为准，防止未来 UI 改动引入竞态。
+                        _startupEnabled = requestedStartupEnabled;
                         this.RaisePropertyChanged(nameof(StartupEnabled));
                     }
                 }
 
                 _savedConfig = config;
-                _savedStartupEnabled = StartupEnabled;
+                _savedStartupEnabled = _startupEnabled;
                 _savedEmailConfig = emailConfig;
                 HasUnsavedChanges = false;
-                _logger.LogInformation("配置已保存");
+
+                if (startupOperation.HasValue && !startupOperation.Value.Success)
+                {
+                    _logger.LogWarning("其他配置已保存，但开机自启设置未生效");
+                    await ShowAlertAsync(
+                        "开机自启设置失败",
+                        "无法更新当前用户的开机自启设置。请检查安全软件或系统策略是否阻止程序修改启动项，然后重试。" +
+                        $"\n\n详细信息：{startupOperation.Value.ErrorMessage}");
+                }
+                else
+                {
+                    _logger.LogInformation("配置已保存");
+                }
             }
             else
             {

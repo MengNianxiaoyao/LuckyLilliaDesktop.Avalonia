@@ -28,8 +28,16 @@ public partial class App : Application
         AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
         Console.CancelKeyPress += OnCancelKeyPress;
         
-        // 旧版用注册表实现开机自启，新版改用 Task Scheduler，启动时自动迁移
-        StartupManager.MigrateFromLegacyRegistry();
+        // 后台检查开机自启：清理失效的 HKCU Run 值，并迁移旧版本
+        // 创建的同名计划任务。新的自启方式仍只使用当前用户注册表。
+        _ = Task.Run(() =>
+        {
+            var cleanup = StartupManager.TryCleanupInvalidRegistryStartup();
+            if (!cleanup.Success)
+            {
+                Log.Warning("检查或迁移开机自启配置失败: {ErrorMessage}", cleanup.ErrorMessage);
+            }
+        });
         
         Log.Information("应用初始化完成");
     }
