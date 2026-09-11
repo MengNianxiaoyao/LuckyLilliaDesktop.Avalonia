@@ -11,6 +11,7 @@
 |------|----------|--------|
 | 路径 / 启动选项 / 代理 / 日志 / 关闭行为 | `qq_path` `pmhq_path` ... `headless` `http_proxy` `close_to_tray` 等 | `ConfigViewModel`（系统配置页） |
 | 框架跟随启动 | `auto_start_frameworks` | `IntegrationWizardViewModel`（对接向导 / 框架操作对话框） |
+| 服务器线路 / 登录协议 | `server_region` `protocol` | **无写入方**：配置页 UI 暂时注释掉，只能手改文件（见下"没有 UI 的字段不要写回"） |
 | 关闭窗口"记住选择" | `close_to_tray` | `MainWindow.OnWindowClosing` 关闭对话框（走 `SetSettingAsync`，只改单 key，安全） |
 | 各类中间态 | `window_left` `window_top` 等 | 其他零散写入 |
 
@@ -29,6 +30,14 @@
   都把 `auto_start_frameworks` 冲成 `[]`、`close_to_tray` 冲成 `null`（框架跟随启动 + 关闭行为设置丢失）。
 
 只改**单个 key** 时用 `ConfigManager.SetSettingAsync(key, value)` —— 它基于 `_rawJson` 合并写，天然安全，不受此约定约束。
+
+## 没有 UI 的字段不要写回
+
+配置页整体存回时，写进去的是**页面加载时**读到的值（`LoadConfigAsync` 每次都重读文件，但页面上的值是早先加载的）。
+字段没有 UI 时用户只能手改文件，页面若照常写回，下次保存配置页就会把手改的值冲回旧值，而且用户在界面上看不出来。
+
+所以 `protocol` / `server_region` 的 UI 注释掉期间，`ConfigViewModel` 只加载这两个字段，`SaveConfigAsync` 的写回行和
+`CheckUnsavedChanges` 的检测行都注释掉了；恢复 UI（`ConfigPage.axaml` 里的注释块）时要把这几行一并放开。
 
 ## 三态字段 close_to_tray
 

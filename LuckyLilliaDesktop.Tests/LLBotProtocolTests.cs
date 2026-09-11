@@ -47,9 +47,9 @@ public class LLBotProtocolTests
     [InlineData("macos", LLBotProtocol.MacOS)]
     [InlineData(" Mac ", LLBotProtocol.MacOS)]
     [InlineData("darwin", LLBotProtocol.MacOS)]
-    [InlineData(null, LLBotProtocol.MacOS)]
-    [InlineData("", LLBotProtocol.MacOS)]
-    [InlineData("windows", LLBotProtocol.MacOS)]
+    [InlineData(null, LLBotProtocol.Linux)]
+    [InlineData("", LLBotProtocol.Linux)]
+    [InlineData("windows", LLBotProtocol.Linux)]
     public void Normalize_MapsAliasesAndFallsBackToDefault(string? input, string expected)
     {
         Assert.Equal(expected, LLBotProtocol.Normalize(input));

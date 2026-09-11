@@ -52,7 +52,6 @@ public class ConfigViewModel : ViewModelBase
             AutoLoginQQ != _savedConfig.AutoLoginQQ ||
             AutoStartBot != _savedConfig.AutoStartBot ||
             Headless != _savedConfig.Headless ||
-            Protocol != _savedConfig.Protocol ||
             Debug != _savedConfig.Debug ||
             MinimizeToTrayOnStart != _savedConfig.MinimizeToTrayOnStart ||
             CloseToTray != _savedConfig.CloseToTray ||
@@ -60,9 +59,11 @@ public class ConfigViewModel : ViewModelBase
             StartupCommandEnabled != _savedConfig.StartupCommandEnabled ||
             StartupCommand != _savedConfig.StartupCommand ||
             HttpProxy != _savedConfig.HttpProxy ||
-            ServerRegion != _savedConfig.ServerRegion ||
             LogSaveEnabled != _savedConfig.LogSaveEnabled ||
             LogRetentionHours != _savedConfig.LogRetentionSeconds / 3600 ||
+            // Protocol / ServerRegion 的 UI 暂时注释掉, 不参与检测 (见 SaveConfigAsync)
+            // Protocol != _savedConfig.Protocol ||
+            // ServerRegion != _savedConfig.ServerRegion ||
             emailChanged;
     }
 
@@ -126,7 +127,7 @@ public class ConfigViewModel : ViewModelBase
     // macOS 恒为无头模式 (见 AppConfig.Headless), 配置页禁用该开关并给出说明.
     public bool IsHeadlessForced => PlatformHelper.IsMacOS;
 
-    // 无头模式 LLBot 登录协议 (--protocol), 取值见 LLBotProtocol.
+    // 无头模式 LLBot 登录协议 (--protocol), 取值见 LLBotProtocol. UI 暂时注释掉, 本页只加载不写回 (见 SaveConfigAsync).
     private string _protocol = LLBotProtocol.Default;
 
     public string Protocol
@@ -143,10 +144,10 @@ public class ConfigViewModel : ViewModelBase
     // ComboBox 绑定: 0=Linux, 1=macOS
     public int ProtocolIndex
     {
-        get => _protocol == LLBotProtocol.Linux ? 0 : 1;
+        get => _protocol == LLBotProtocol.MacOS ? 1 : 0;
         set
         {
-            var newProtocol = value == 0 ? LLBotProtocol.Linux : LLBotProtocol.MacOS;
+            var newProtocol = value == 1 ? LLBotProtocol.MacOS : LLBotProtocol.Linux;
             if (_protocol != newProtocol)
                 Protocol = newProtocol;
         }
@@ -273,7 +274,7 @@ public class ConfigViewModel : ViewModelBase
         set { this.RaiseAndSetIfChanged(ref _httpProxy, value); CheckUnsavedChanges(); }
     }
 
-    // 服务器线路. "overseas"=国外(默认), "china"=国内.
+    // 服务器线路. "overseas"=国外(默认), "china"=国内. UI 暂时注释掉, 本页只加载不写回 (见 SaveConfigAsync).
     private string _serverRegion = "overseas";
 
     public string ServerRegion
@@ -738,16 +739,18 @@ public class ConfigViewModel : ViewModelBase
             config.AutoLoginQQ = AutoLoginQQ;
             config.AutoStartBot = AutoStartBot;
             config.Headless = Headless;
-            config.Protocol = Protocol;
             config.Debug = Debug;
             config.MinimizeToTrayOnStart = MinimizeToTrayOnStart;
             config.CloseToTray = CloseToTray;
             config.StartupCommandEnabled = StartupCommandEnabled;
             config.StartupCommand = StartupCommand;
             config.HttpProxy = HttpProxy;
-            config.ServerRegion = ServerRegion;
             config.LogSaveEnabled = LogSaveEnabled;
             config.LogRetentionSeconds = LogRetentionHours * 3600;
+            // Protocol / ServerRegion 的 UI 暂时注释掉 (ConfigPage.axaml), 只能手改 app_settings.json.
+            // 本页不写回, 否则会用页面加载时的旧值覆盖手改的值. 恢复 UI 时连同 CheckUnsavedChanges 一起放开:
+            // config.Protocol = Protocol;
+            // config.ServerRegion = ServerRegion;
 
             var success = await _configManager.SaveConfigAsync(config);
 

@@ -11,7 +11,7 @@ public static partial class LLBotProtocol
 {
     public const string Linux = "linux";
     public const string MacOS = "macos";
-    public const string Default = MacOS;
+    public const string Default = Linux;
 
     // LLBot 另支持 windows / watch, Desktop 未开放, 这两种 session 也不列进登录框
     public static readonly string[] Supported = [Linux, MacOS];
