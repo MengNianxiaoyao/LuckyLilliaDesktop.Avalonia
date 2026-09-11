@@ -11,19 +11,21 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using LuckyLilliaDesktop.Services;
+using LuckyLilliaDesktop.Utils;
 
 namespace LuckyLilliaDesktop.Views;
 
 /// <summary>
-/// 无头模式登录框 (一个框搞定): 快速登录账号列表 (扫 session 文件) + 扫码登录。
-/// 选账号 -&gt; onStart(uin) 启动 LLBot 走快速登录; 选扫码 -&gt; onStart(null) 启动 LLBot 后框内显示二维码。
+/// 无头模式登录框 (一个框搞定): 快速登录账号列表 (扫 session 文件, 每项标注协议) + 扫码登录。
+/// 选账号 -&gt; onStart(uin, 该账号的协议) 启动 LLBot 走快速登录; 选扫码 -&gt; onStart(null, scanProtocol) 启动 LLBot 后框内显示二维码。
 /// 数据/状态全程走 LLBot IPC (LoginStateStream)。登录成功 Close(uin), 取消 Close(null)。
 /// </summary>
 public partial class HeadlessLoginDialog : Window
 {
     private readonly ILLBotIpcClient? _ipc;
     private readonly List<LoginAccount> _accounts;
-    private readonly Func<string?, Task<bool>>? _onStart;
+    private readonly string _scanProtocol = LLBotProtocol.Default;
+    private readonly Func<string?, string, Task<bool>>? _onStart;
     private IDisposable? _subscription;
     private string? _lastQrShown;
     private bool _started;
@@ -36,10 +38,11 @@ public partial class HeadlessLoginDialog : Window
         _accounts = new List<LoginAccount>();
     }
 
-    public HeadlessLoginDialog(ILLBotIpcClient ipc, List<LoginAccount> accounts, Func<string?, Task<bool>> onStart) : this()
+    public HeadlessLoginDialog(ILLBotIpcClient ipc, List<LoginAccount> accounts, string scanProtocol, Func<string?, string, Task<bool>> onStart) : this()
     {
         _ipc = ipc;
         _accounts = accounts ?? new List<LoginAccount>();
+        _scanProtocol = scanProtocol;
         _onStart = onStart;
     }
 
@@ -49,7 +52,7 @@ public partial class HeadlessLoginDialog : Window
         // 没有 session 账号 -> 直接走扫码登录 (不显示空账号列表)
         if (_accounts.Count == 0)
         {
-            _ = BeginLoginAsync(null);
+            _ = BeginLoginAsync(null, _scanProtocol);
             return;
         }
         AccountList.ItemsSource = _accounts;
@@ -84,24 +87,29 @@ public partial class HeadlessLoginDialog : Window
 
     private void OnAccountClick(object? sender, Avalonia.Input.PointerPressedEventArgs e)
     {
-        if (sender is Control c && c.Tag is string uin)
+        // 同号可能有多个协议的 session, 按整项 (uin + 协议) 取
+        if (sender is Control { DataContext: LoginAccount account })
         {
-            _ = BeginLoginAsync(uin);
+            _ = BeginLoginAsync(account.Uin, account.Protocol);
         }
     }
 
-    private void OnScanClick(object? sender, Avalonia.Input.PointerPressedEventArgs e) => _ = BeginLoginAsync(null);
+    private void OnScanClick(object? sender, Avalonia.Input.PointerPressedEventArgs e) => _ = BeginLoginAsync(null, _scanProtocol);
 
-    private async Task BeginLoginAsync(string? uin)
+    private async Task BeginLoginAsync(string? uin, string protocol)
     {
         if (_started || _onStart == null || _ipc == null) return;
         _started = true;
+
+        // 显示本次启动的协议而非 _scanProtocol: 快速登录转扫码时沿用的是该账号的协议
+        var protocolName = LLBotProtocol.DisplayName(protocol);
+        QRProtocolText.Text = $"登录协议：{protocolName}";
 
         // 选账号 -> 先进"登录中"; 选扫码 -> 直接进二维码面板。
         // 注意: 快速登录若 session 过期, LLBot 会自动转扫码, IPC 会推 need_qrcode, 届时切到二维码面板。
         if (uin != null)
         {
-            WaitingText.Text = $"正在登录 {uin} ...";
+            WaitingText.Text = $"正在登录 {uin}（{protocolName}）...";
             ShowPanel(WaitingPanel);
         }
         else
@@ -113,7 +121,7 @@ public partial class HeadlessLoginDialog : Window
         _subscription = _ipc.LoginStateStream.Subscribe(info =>
             Dispatcher.UIThread.Post(() => Apply(info)));
 
-        var ok = await _onStart(uin);
+        var ok = await _onStart(uin, protocol);
         if (!ok)
         {
             WaitingText.Text = "启动失败，请检查日志";

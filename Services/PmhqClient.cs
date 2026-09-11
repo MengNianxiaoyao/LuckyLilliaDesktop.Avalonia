@@ -1,4 +1,5 @@
 using LuckyLilliaDesktop.Models;
+using LuckyLilliaDesktop.Utils;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections;
@@ -34,9 +35,14 @@ public class LoginAccount : INotifyPropertyChanged
     public string FaceUrl { get; set; } = "";
     public bool IsQuickLogin { get; set; }
 
+    // 无头 session 所属的 LLBot 协议 (LLBotProtocol.*), 登录框显示为标签; PMHQ 登录列表不填
+    public string Protocol { get; set; } = "";
+
     // 列表显示用: 有昵称显昵称, 否则显 QQ 号
     public string DisplayName => string.IsNullOrEmpty(NickName) ? Uin : NickName;
     public bool HasNick => !string.IsNullOrEmpty(NickName);
+    public bool HasProtocol => !string.IsNullOrEmpty(Protocol);
+    public string ProtocolDisplayName => LLBotProtocol.DisplayName(Protocol);
 
     // 头像异步下载后填充, 通知 UI 更新
     private Avalonia.Media.Imaging.Bitmap? _avatar;

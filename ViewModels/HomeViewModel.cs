@@ -47,8 +47,8 @@ public class HomeViewModel : ViewModelBase
     public Func<string, Func<Task>, Task>? ShowLoadingDialog { get; set; }
     public Func<Task<string?>>? ShowAuthTokenDialog { get; set; }
     public Func<Task<string?>>? ShowQRLoginDialog { get; set; }
-    // 无头登录框: 传入 (session 账号列表, 启动 LLBot 的回调) -> 返回登录成功的 uin (取消/失败返回 null)
-    public Func<List<LoginAccount>, Func<string?, Task<bool>>, Task<string?>>? ShowHeadlessLoginDialog { get; set; }
+    // 无头登录框: 传入 (session 账号列表, 扫码用的协议, 启动 LLBot 的回调 (uin, 协议)) -> 返回登录成功的 uin (取消/失败返回 null)
+    public Func<List<LoginAccount>, string, Func<string?, string, Task<bool>>, Task<string?>>? ShowHeadlessLoginDialog { get; set; }
 
     // 标题
     private string _title = "控制面板";
@@ -1357,7 +1357,8 @@ public class HomeViewModel : ViewModelBase
                 config.AutoLoginQQ,
                 authToken,
                 config.Debug,
-                config.HttpProxy);
+                config.HttpProxy,
+                config.ServerRegion == "china");
 
             if (pmhqSuccess)
             {
@@ -1377,7 +1378,8 @@ public class HomeViewModel : ViewModelBase
                     config.LLBotPath,
                     llbotIpcPipe,
                     loginUin: config.AutoLoginQQ,
-                    httpProxy: config.HttpProxy);
+                    httpProxy: config.HttpProxy,
+                    useChinaCdn: config.ServerRegion == "china");
 
                 if (llbotSuccess)
                 {
@@ -1548,23 +1550,24 @@ public class HomeViewModel : ViewModelBase
 
         _logger.LogInformation("准备启动 LLBot (无头模式)...");
 
-        // 启动 LLBot 的本地函数: uin 非空走快速登录 (--qq=uin), null 走扫码; 同时拉起 IPC (Windows 命名管道 / Unix UDS)
-        async Task<bool> StartLLBotWithUinAsync(string? uin)
+        // 启动 LLBot 的本地函数: uin 非空走快速登录 (--qq=uin), null 走扫码; protocol 作为 --protocol,
+        // session 按协议隔离, 快速登录必须用该 session 的协议. 同时拉起 IPC (Windows 命名管道 / Unix UDS)
+        async Task<bool> StartLLBotWithUinAsync(string? uin, string protocol)
         {
             string? pipe = null;
             try { pipe = await _llbotIpc.StartAsync(); }
             catch (Exception ex) { _logger.LogWarning(ex, "启动 LLBot IPC 客户端失败"); }
-            return await _processManager.StartLLBotAsync(config.NodePath, config.LLBotPath, pipe, uin, config.HttpProxy);
+            return await _processManager.StartLLBotAsync(config.NodePath, config.LLBotPath, pipe, uin, config.HttpProxy, config.ServerRegion == "china", protocol);
         }
 
-        if (ShowHeadlessLoginDialog != null && !HasLocalSession(config.LLBotPath, config.AutoLoginQQ))
+        if (ShowHeadlessLoginDialog != null && !HasLocalSession(config.LLBotPath, config.AutoLoginQQ, config.Protocol))
         {
-            // 场景: 未配自动登录号, 或配了但本地找不到对应 session -> 弹框 (账号列表 + 扫码)。
+            // 场景: 未配自动登录号, 或配了但本地找不到该号在当前协议下的 session -> 弹框 (账号列表 + 扫码)。
             // 若不弹框就直接 --qq=<uin>, LLBot 会因缺 session 自动转扫码, 但控制面板没开框, 用户看不到二维码。
             var accounts = ScanSessionAccounts(config.LLBotPath);
-            _logger.LogInformation("无头登录: 扫描到 {Count} 个本地账号 (AutoLoginQQ='{AutoUin}' 未找到 session 或未配置)",
-                accounts.Count, config.AutoLoginQQ);
-            var loggedUin = await ShowHeadlessLoginDialog(accounts, StartLLBotWithUinAsync);
+            _logger.LogInformation("无头登录: 扫描到 {Count} 个本地账号 (AutoLoginQQ='{AutoUin}' 在 {Protocol} 协议下未找到 session 或未配置)",
+                accounts.Count, config.AutoLoginQQ, config.Protocol);
+            var loggedUin = await ShowHeadlessLoginDialog(accounts, config.Protocol, StartLLBotWithUinAsync);
             if (string.IsNullOrEmpty(loggedUin))
             {
                 _logger.LogWarning("无头登录已取消或失败, 停止服务");
@@ -1577,11 +1580,11 @@ public class HomeViewModel : ViewModelBase
         }
         else
         {
-            // 配了自动登录号且本地有对应 session -> 直接快速登录 (--qq=该号); 或调用方没注入登录框 (视为直接启动)
+            // 配了自动登录号且本地有该号当前协议的 session -> 直接快速登录 (--qq=该号); 或调用方没注入登录框 (视为直接启动)
             var autoUin = string.IsNullOrEmpty(config.AutoLoginQQ) ? null : config.AutoLoginQQ;
             if (!string.IsNullOrEmpty(autoUin))
-                _logger.LogInformation("配置了自动登录号且本地存在 session, 直接快速登录: {Uin}", autoUin);
-            if (!await StartLLBotWithUinAsync(autoUin))
+                _logger.LogInformation("配置了自动登录号且本地存在 session, 直接快速登录: {Uin} ({Protocol})", autoUin, config.Protocol);
+            if (!await StartLLBotWithUinAsync(autoUin, config.Protocol))
             {
                 ErrorMessage = "LLBot 启动失败，请检查日志";
                 _logger.LogError("LLBot 启动失败");
@@ -1625,18 +1628,20 @@ public class HomeViewModel : ViewModelBase
         await StartAutoFrameworksAsync(config);
     }
 
-    // 判断 config.AutoLoginQQ 是否有对应的本地 session 文件 -> 决定能否直接快速登录 (不弹框).
+    // 判断 config.AutoLoginQQ 在指定协议下是否有本地 session 文件 -> 决定能否直接快速登录 (不弹框).
+    // LLBot 只读 --protocol 对应的 session, 同号其他协议的 session 不算.
     // AutoLoginQQ 为空时返回 false (表示无自动登录号, 走弹框流程).
-    private static bool HasLocalSession(string? llbotPath, string? uin)
+    private static bool HasLocalSession(string? llbotPath, string? uin, string protocol)
     {
         if (string.IsNullOrWhiteSpace(uin)) return false;
         var llbotDir = Path.GetDirectoryName(llbotPath);
         if (string.IsNullOrEmpty(llbotDir)) return false;
-        var sessionFile = Path.Combine(llbotDir, "data", $"qq-session-{uin}.json");
+        var sessionFile = Path.Combine(llbotDir, "data", LLBotProtocol.SessionFileName(uin, protocol));
         return File.Exists(sessionFile);
     }
 
-    // 扫描 LLBot data 目录下的 qq-session-{uin}.json, 提取 uin (文件名) + nick (文件内容), 供快速登录列表
+    // 扫描 LLBot data 目录下各协议的 session 文件, 提取 uin + 协议 (文件名) + nick (文件内容), 供快速登录列表.
+    // 同号不同协议的 session 互不通用, 各列一项, 快速登录时用该项的协议.
     private static List<LoginAccount> ScanSessionAccounts(string? llbotPath)
     {
         var result = new List<LoginAccount>();
@@ -1649,11 +1654,7 @@ public class HomeViewModel : ViewModelBase
         {
             try
             {
-                var name = Path.GetFileNameWithoutExtension(file);
-                const string prefix = "qq-session-";
-                if (!name.StartsWith(prefix)) continue;
-                var uin = name.Substring(prefix.Length);
-                if (string.IsNullOrEmpty(uin) || !long.TryParse(uin, out _)) continue;
+                if (!LLBotProtocol.TryParseSessionFileName(Path.GetFileName(file), out var uin, out var protocol)) continue;
 
                 var nick = "";
                 try
@@ -1666,12 +1667,17 @@ public class HomeViewModel : ViewModelBase
                 {
                     Uin = uin,
                     NickName = nick,
+                    Protocol = protocol,
                     IsQuickLogin = true,
                     FaceUrl = $"https://q1.qlogo.cn/g?b=qq&nk={uin}&s=100",
                 });
             }
             catch { }
         }
+        // 同号的多个协议排在一起 (GetFiles 在 macOS/Linux 上不保证顺序)
+        result.Sort((a, b) => a.Uin != b.Uin
+            ? string.CompareOrdinal(a.Uin, b.Uin)
+            : string.CompareOrdinal(a.Protocol, b.Protocol));
         return result;
     }
 

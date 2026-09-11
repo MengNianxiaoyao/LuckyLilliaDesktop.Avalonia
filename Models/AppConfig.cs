@@ -40,6 +40,16 @@ public class AppConfig
         set => _headless = value;
     }
 
+    // 无头模式传给 LLBot 的 --protocol. setter 归一化, 读到的恒为 LLBotProtocol.Supported 之一.
+    private string _protocol = LLBotProtocol.Default;
+
+    [JsonPropertyName("protocol")]
+    public string Protocol
+    {
+        get => _protocol;
+        set => _protocol = LLBotProtocol.Normalize(value);
+    }
+
     [JsonPropertyName("debug")]
     public bool Debug { get; set; } = false;
 
@@ -59,6 +69,10 @@ public class AppConfig
     // HTTP 代理: 非空时以 HTTP_PROXY/HTTPS_PROXY 环境变量传给 PMHQ 和 LLBot
     [JsonPropertyName("http_proxy")]
     public string HttpProxy { get; set; } = string.Empty;
+
+    // 服务器线路: "overseas"=国外(默认), "china"=国内. 选国内时给 PMHQ / LLBot 传 --cdn china.
+    [JsonPropertyName("server_region")]
+    public string ServerRegion { get; set; } = "overseas";
 
     // 日志设置
     [JsonPropertyName("log_save_enabled")]

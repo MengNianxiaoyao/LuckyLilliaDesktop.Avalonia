@@ -74,10 +74,9 @@
                                         Padding="12,10"
                                         Margin="0,2"
                                         Background="{DynamicResource CardBackgroundSecondary}"
-                                        Tag="{Binding Uin}"
                                         Cursor="Hand"
                                         PointerPressed="OnAccountClick">
-                                    <Grid ColumnDefinitions="Auto,*">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
                                         <!-- 圆形头像 (QQ 公开头像, 异步加载) -->
                                         <Border Grid.Column="0"
                                                 Width="44" Height="44"
@@ -99,6 +98,19 @@
                                                        Margin="0,2,0,0"
                                                        IsVisible="{Binding HasNick}"/>
                                         </StackPanel>
+                                        <!-- 协议标签: 同号不同协议的 session 各占一项, 靠它区分 -->
+                                        <Border Grid.Column="2"
+                                                CornerRadius="6"
+                                                Padding="6,1"
+                                                Margin="8,0,0,0"
+                                                VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource PrimaryBrush}"
+                                                BorderThickness="1"
+                                                IsVisible="{Binding HasProtocol}">
+                                            <TextBlock Text="{Binding ProtocolDisplayName}"
+                                                       FontSize="11"
+                                                       Foreground="{DynamicResource PrimaryBrush}"/>
+                                        </Border>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -143,6 +155,10 @@
                            Foreground="{DynamicResource TextSecondary}"
                            TextWrapping="Wrap"
                            TextAlignment="Center"/>
+                <TextBlock x:Name="QRProtocolText"
+                           FontSize="12"
+                           Foreground="{DynamicResource TextSecondary}"
+                           HorizontalAlignment="Center"/>
             </StackPanel>
 
             <!-- 底部纯文字操作: 左 扫码登录 (粉色), 右 取消 -->

@@ -9,9 +9,11 @@ namespace LuckyLilliaDesktop.Views;
 
 public partial class AuthTokenDialog : Window
 {
-    private const string AuthTokenUrl = "https://auth.luckylillia.com";
+    private const string OverseasAuthTokenUrl = "https://auth.luckylillia.com";
+    private const string ChinaAuthTokenUrl = "https://llbot.wumiao.wang";
 
     private readonly IAuthTokenValidator? _validator;
+    private readonly string _authTokenUrl;
     private bool _validating;
     // 上一次验证因网络/服务器问题无法判定 (Inconclusive): 再点一次"确定"即跳过验证放行。
     private bool _skipValidationConfirmed;
@@ -21,10 +23,14 @@ public partial class AuthTokenDialog : Window
     {
     }
 
-    public AuthTokenDialog(IAuthTokenValidator? validator)
+    // serverRegion: "china"=国内线路, 其余 (含 null / "overseas")=国外线路。国内展示 wumiao 获取链接。
+    public AuthTokenDialog(IAuthTokenValidator? validator, string? serverRegion = null)
     {
         _validator = validator;
+        _authTokenUrl = serverRegion == "china" ? ChinaAuthTokenUrl : OverseasAuthTokenUrl;
         InitializeComponent();
+
+        LinkText.Text = _authTokenUrl;
 
         // 用户改了 token: 撤销"跳过验证"确认并清掉旧错误, 让下一次点击重新走验证。
         InputBox.TextChanged += (_, _) =>
@@ -38,7 +44,7 @@ public partial class AuthTokenDialog : Window
     {
         try
         {
-            Process.Start(new ProcessStartInfo(AuthTokenUrl) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(_authTokenUrl) { UseShellExecute = true });
         }
         catch
         {

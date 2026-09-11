@@ -751,7 +751,10 @@ public partial class MainWindow : Window
         EnsureVisibleForDialog();
         var app = Application.Current as App;
         var validator = app?.Services?.GetService(typeof(IAuthTokenValidator)) as IAuthTokenValidator;
-        var dialog = new AuthTokenDialog(validator);
+        var serverRegion = _configManager != null
+            ? (await _configManager.LoadConfigAsync()).ServerRegion
+            : null;
+        var dialog = new AuthTokenDialog(validator, serverRegion);
         return await dialog.ShowDialog<string?>(this);
     }
 
@@ -767,7 +770,7 @@ public partial class MainWindow : Window
         return await ShowFloatingLoginWindowAsync(dialog, () => dialog.LoggedInUin);
     }
 
-    private async Task<string?> ShowHeadlessLoginDialogAsync(List<LoginAccount> accounts, Func<string?, Task<bool>> onStart)
+    private async Task<string?> ShowHeadlessLoginDialogAsync(List<LoginAccount> accounts, string scanProtocol, Func<string?, string, Task<bool>> onStart)
     {
         EnsureVisibleForDialog();
         var app = Application.Current as App;
@@ -775,7 +778,7 @@ public partial class MainWindow : Window
         {
             return null;
         }
-        var dialog = new HeadlessLoginDialog(ipc, accounts, onStart);
+        var dialog = new HeadlessLoginDialog(ipc, accounts, scanProtocol, onStart);
         return await ShowFloatingLoginWindowAsync(dialog, () => dialog.LoggedInUin);
     }
 

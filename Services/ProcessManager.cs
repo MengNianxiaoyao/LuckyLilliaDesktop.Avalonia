@@ -203,7 +203,7 @@ public class ProcessManager : IProcessManager, IDisposable
     // QQ 由 PMHQ 启动: qqPath 写入 pmhq_config.json 的 qq_path (见 UpdatePmhqConfigAsync),
     // PMHQ find_existing_qq_pid 找不到已运行的 QQ 时按 qq_path 自行拉起 (Desktop 不再单独启动 QQ).
     // authToken 作为 --auth-token 传给 PMHQ (PMHQ 必填, 缺则启动即退).
-    public async Task<bool> StartPmhqAsync(string pmhqPath, string qqPath, string autoLoginQQ, string authToken, bool debug = false, string? httpProxy = null)
+    public async Task<bool> StartPmhqAsync(string pmhqPath, string qqPath, string autoLoginQQ, string authToken, bool debug = false, string? httpProxy = null, bool useChinaCdn = false)
     {
         try
         {
@@ -273,6 +273,8 @@ public class ProcessManager : IProcessManager, IDisposable
                     args.Add("--debug=true");
                     args.Add("--qq-console");
                 }
+                if (useChinaCdn)
+                    args.Add("--cdn china");
 
                 var argsString = string.Join(" ", args);
 
@@ -306,6 +308,8 @@ public class ProcessManager : IProcessManager, IDisposable
                         args.Add($"--qq={autoLoginQQ}");
                     args.Add("--debug=true");
                     args.Add("--qq-console");
+                    if (useChinaCdn)
+                        args.Add("--cdn china");
 
                     var argsString = string.Join(" ", args);
                     startInfo = new ProcessStartInfo
@@ -348,6 +352,13 @@ public class ProcessManager : IProcessManager, IDisposable
                     if (!string.IsNullOrEmpty(autoLoginQQ))
                     {
                         startInfo.ArgumentList.Add($"--qq={autoLoginQQ}");
+                    }
+
+                    // 国内线路: --cdn china (ArgumentList 每项一个 arg, 故拆成两项)
+                    if (useChinaCdn)
+                    {
+                        startInfo.ArgumentList.Add("--cdn");
+                        startInfo.ArgumentList.Add("china");
                     }
 
                     var fullCommand = $"{pmhqPath} {string.Join(" ", startInfo.ArgumentList)}";
@@ -485,7 +496,7 @@ public class ProcessManager : IProcessManager, IDisposable
         }
     }
 
-    public async Task<bool> StartLLBotAsync(string nodePath, string scriptPath, string? ipcPipeName = null, string? loginUin = null, string? httpProxy = null)
+    public async Task<bool> StartLLBotAsync(string nodePath, string scriptPath, string? ipcPipeName = null, string? loginUin = null, string? httpProxy = null, bool useChinaCdn = false, string? protocol = null)
     {
         try
         {
@@ -540,7 +551,8 @@ public class ProcessManager : IProcessManager, IDisposable
             startInfo.ArgumentList.Add(scriptFileName);
 
             // 传给 LLBot 脚本的参数 (都放在 -- 之后)
-            // PmhqPort 有值 = 非 headless, 启用 PMHQ 模式; loginUin 有值 = 快速登录指定 QQ 号
+            // PmhqPort 有值 = 非 headless, 启用 PMHQ 模式; loginUin 有值 = 快速登录指定 QQ 号;
+            // protocol 仅无头直连用, 决定 LLBot 的协议端以及读写哪个 session 文件
             var userArgs = new List<string>();
             if (PmhqPort.HasValue)
             {
@@ -549,6 +561,15 @@ public class ProcessManager : IProcessManager, IDisposable
             if (!string.IsNullOrEmpty(loginUin))
             {
                 userArgs.Add($"--qq={loginUin}");
+            }
+            if (!string.IsNullOrEmpty(protocol))
+            {
+                userArgs.Add($"--protocol={protocol}");
+            }
+            if (useChinaCdn)
+            {
+                userArgs.Add("--cdn");
+                userArgs.Add("china");
             }
             if (userArgs.Count > 0)
             {
