@@ -60,7 +60,6 @@ public class ConfigViewModel : ViewModelBase
             StartupCommandEnabled != _savedConfig.StartupCommandEnabled ||
             StartupCommand != _savedConfig.StartupCommand ||
             HttpProxy != _savedConfig.HttpProxy ||
-            ServerRegion != _savedConfig.ServerRegion ||
             LogSaveEnabled != _savedConfig.LogSaveEnabled ||
             LogRetentionHours != _savedConfig.LogRetentionSeconds / 3600 ||
             emailChanged;
@@ -271,32 +270,6 @@ public class ConfigViewModel : ViewModelBase
     {
         get => _httpProxy;
         set { this.RaiseAndSetIfChanged(ref _httpProxy, value); CheckUnsavedChanges(); }
-    }
-
-    // 服务器线路. "overseas"=国外(默认), "china"=国内.
-    private string _serverRegion = "overseas";
-
-    public string ServerRegion
-    {
-        get => _serverRegion;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _serverRegion, value);
-            this.RaisePropertyChanged(nameof(ServerRegionIndex));
-            CheckUnsavedChanges();
-        }
-    }
-
-    // ComboBox 绑定: 0=国外(overseas), 1=国内(china)
-    public int ServerRegionIndex
-    {
-        get => _serverRegion == "china" ? 1 : 0;
-        set
-        {
-            var newRegion = value == 1 ? "china" : "overseas";
-            if (_serverRegion != newRegion)
-                ServerRegion = newRegion;
-        }
     }
 
     private bool _logSaveEnabled = true;
@@ -655,7 +628,6 @@ public class ConfigViewModel : ViewModelBase
             StartupCommandEnabled = config.StartupCommandEnabled;
             StartupCommand = config.StartupCommand;
             HttpProxy = config.HttpProxy;
-            ServerRegion = config.ServerRegion;
 
             LogSaveEnabled = config.LogSaveEnabled;
             LogRetentionHours = config.LogRetentionSeconds / 3600;
@@ -686,7 +658,6 @@ public class ConfigViewModel : ViewModelBase
                 StartupCommandEnabled = StartupCommandEnabled,
                 StartupCommand = StartupCommand,
                 HttpProxy = HttpProxy,
-                ServerRegion = ServerRegion,
                 LogSaveEnabled = LogSaveEnabled,
                 LogRetentionSeconds = LogRetentionHours * 3600
             };
@@ -745,7 +716,6 @@ public class ConfigViewModel : ViewModelBase
             config.StartupCommandEnabled = StartupCommandEnabled;
             config.StartupCommand = StartupCommand;
             config.HttpProxy = HttpProxy;
-            config.ServerRegion = ServerRegion;
             config.LogSaveEnabled = LogSaveEnabled;
             config.LogRetentionSeconds = LogRetentionHours * 3600;
 

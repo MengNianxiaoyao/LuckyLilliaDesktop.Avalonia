@@ -13,6 +13,7 @@
 | 框架跟随启动 | `auto_start_frameworks` | `IntegrationWizardViewModel`（对接向导 / 框架操作对话框） |
 | 关闭窗口"记住选择" | `close_to_tray` | `MainWindow.OnWindowClosing` 关闭对话框（走 `SetSettingAsync`，只改单 key，安全） |
 | 各类中间态 | `window_left` `window_top` 等 | 其他零散写入 |
+| 服务器线路（CDN） | `server_region` | **无写入方**：配置页没有这一项，只能手改文件（见下"没有 UI 的字段不要写回"） |
 
 注意 `close_to_tray` 有**两个**写入方：系统配置页的下拉框（read-modify-write 整体存回）和关闭对话框的"记住选择"
 （`SetSettingAsync("close_to_tray", ...)` 单 key 合并写）。两者写的是同一个 key，最后写入者生效；配置页每次 load 会读到最新值。
@@ -29,6 +30,15 @@
   都把 `auto_start_frameworks` 冲成 `[]`、`close_to_tray` 冲成 `null`（框架跟随启动 + 关闭行为设置丢失）。
 
 只改**单个 key** 时用 `ConfigManager.SetSettingAsync(key, value)` —— 它基于 `_rawJson` 合并写，天然安全，不受此约定约束。
+
+## 没有 UI 的字段不要写回
+
+配置页整体存回时，写进去的是**页面加载时**读到的值（`LoadConfigAsync` 每次都重读文件，但页面上的值是早先加载的）。
+字段在配置页上没有对应控件时，用户只能手改文件；页面若照常写回，下次保存配置页就会把手改的值冲回旧值，用户在界面上还看不出来。
+
+所以 `server_region` 不出现在 `ConfigViewModel` 里：不加载、不写回、不参与 `CheckUnsavedChanges`。
+它由 `HomeViewModel`（启动时决定是否给 PMHQ / LLBot 传 `--cdn china`）和 `MainWindow`（Auth Token 获取链接）在用到时直接读配置。
+日后要加回 UI，把这三处一起补上即可（历史实现见 tag `v3.1.0`）。
 
 ## 三态字段 close_to_tray
 
